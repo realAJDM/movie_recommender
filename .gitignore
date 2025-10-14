@@ -1,0 +1,7 @@
+# Byte-compiled / packaging files
+__pycache__/
+*.py[cod]
+*.egg-info/
+.DS_Store
+venv/
+.env
