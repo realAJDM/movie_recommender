@@ -1,159 +1,111 @@
+from collections import defaultdict
+import logging
+from collections import defaultdict
+from typing import Dict, List, Tuple
+
 # Load datasets
 movies = ['movie_genre', 'movie_id', 'movie_name']
 ratings = ['movie_name', 'rating', 'user_id']
 
 # Load movies from file. Return dict mapping movie_name -> (movie_id, movie_genre)
 def load_movies(filename: str) -> dict:
-    return {}
-
-# Load ratings. Return dict mapping movie_name -> list of (user_id, rating)
-#!/usr/bin/env python3
-"""movie_recommender.py
-
-Small movie recommender CLI implementing the following features:
-- top_movies: top-n movies by average rating
-- top_movies_in_genre: top-n movies in a genre by average rating
-- top_genres: top-n genres by average of movie averages
-- user_top_genre: user's most preferred genre
-- recommend_movies: 3 most popular movies from user's top genre that the user hasn't rated
-
-Usage:
-    python movie_recommender.py
-
-The program provides a simple text menu to load data files and run each function.
-
-Input files expected (pipe-delimited):
-- movies.txt: movie_genre|movie_id|movie_name
-- ratings.txt: movie_name|rating|user_id
-
-This script focuses on correctness and reasonable input validation (skips malformed lines, logs warnings).
-"""
-
-import csv
-import logging
-import os
-import sys
-from collections import defaultdict
-from typing import Dict, List, Tuple
-
-# Configure logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
-
-# Types
-MoviesDict = Dict[str, Tuple[str, str]]  # movie_name -> (movie_id, genre)
-RatingsDict = Dict[str, List[Tuple[str, float]]]  # movie_name -> list of (user_id, rating)
-
-
-def load_movies(filename: str) -> MoviesDict:
-    """Parse a pipe-delimited movies file and return a mapping of movie_name -> (movie_id, genre).
-
-    Expected header: movie_genre|movie_id|movie_name
-
-    The function handles quoted movie names, strips whitespace, and logs/ignores malformed lines.
-    Movie names are used as keys (stripped). movie_id is converted to int when possible.
+    """
+    Loads movie data from a file, standardizing all keys to lowercase.
 
     Args:
-        filename: path to the movies file
+        filename: The path to the movies data file. The expected format per line is
+                  'movie_genre|movie_id|movie_name'.
 
     Returns:
-        dict mapping movie_name to (movie_id, genre)
+        A dictionary mapping each movie_name (in lowercase) to a tuple 
+        containing its (movie_id, movie_genre in lowercase).
     """
-    res: MoviesDict = {}
-    if not os.path.exists(filename):
-        logging.error("movies file not found: %s", filename)
-        return res
-    with open(filename, newline='', encoding='utf-8', errors='replace') as f:
-        reader = csv.reader(f, delimiter='|', quotechar='"')
-        header = next(reader, None)
-        for row_no, row in enumerate(reader, start=2):
-            if len(row) < 3:
-                logging.warning("movies: skipping malformed line %d: %r", row_no, row)
-                continue
-            genre, mid, name = row[0].strip(), row[1].strip(), row[2].strip()
-            if not name:
-                logging.warning("movies: empty movie name at line %d", row_no)
-                continue
-            try:
-                mid_val = int(mid)
-            except Exception:
-                mid_val = mid
-            res[name] = (mid_val, genre)
-    logging.info("Loaded %d movies from %s", len(res), filename)
-    return res
-
-
-def load_ratings(filename: str) -> RatingsDict:
-    """Parse a pipe-delimited ratings file and return a mapping of movie_name -> list of (user_id, rating).
-
-    Expected header: movie_name|rating|user_id
-
-    The function handles quoted movie names, ignores malformed lines and non-numeric ratings, and logs warnings.
-
-    Args:
-        filename: path to the ratings file
-
-    Returns:
-        dict mapping movie_name to list of (user_id, rating)
-    """
-    res: RatingsDict = {}
-    if not os.path.exists(filename):
-        logging.error("ratings file not found: %s", filename)
-        return res
-    with open(filename, newline='', encoding='utf-8', errors='replace') as f:
-        reader = csv.reader(f, delimiter='|', quotechar='"')
-        header = next(reader, None)
-        for row_no, row in enumerate(reader, start=2):
-            if len(row) < 3:
-                logging.warning("ratings: skipping malformed line %d: %r", row_no, row)
-                continue
-            name, rating_str, user_id = row[0].strip(), row[1].strip(), row[2].strip()
-            if not name:
-                logging.warning("ratings: empty movie name at line %d", row_no)
-                continue
-            try:
-                rating = float(rating_str)
-            except Exception:
-                logging.warning("ratings: bad rating at line %d: %r", row_no, rating_str)
-                continue
-            # Optional: enforce rating range 0-5
-            if not (0.0 <= rating <= 5.0):
-                logging.warning("ratings: out-of-range rating at line %d: %r", row_no, rating)
-                continue
-            res.setdefault(name, []).append((user_id, rating))
-    total = sum(len(v) for v in res.values())
-    logging.info("Loaded %d ratings for %d movies from %s", total, len(res), filename)
-    return res
-
-
-def top_movies(n: int, ratings: RatingsDict) -> List[str]:
-    """Return the top-n movie names ranked by average rating.
-
-    Args:
-        n: number of top movies to return
-        ratings: mapping movie_name -> list of (user_id, rating)
-
-    Returns:
-        list of top-n movie names (strings)
-    """
-    averages = {}
-    for m, vals in ratings.items():
-        nums = []
-        for item in vals:
-            if isinstance(item, (list, tuple)) and len(item) >= 2:
-                try:
-                    nums.append(float(item[1]))
-                except Exception:
+    movie_data = {}
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
                     continue
-            else:
-                try:
-                    nums.append(float(item))
-                except Exception:
-                    continue
-        if nums:
-            averages[m] = sum(nums) / len(nums)
-    sorted_movies = sorted(averages.items(), key=lambda x: (-x[1], x[0]))
-    return [name for name, _ in sorted_movies[:n]]
+                
+                parts = line.split('|', 2)
+                if len(parts) == 3:
+                    genre, movie_id, movie_name = parts
+                    # Convert genre and movie_name to lowercase
+                    # to ensure case-insensitivity.
+                    movie_data[movie_name.lower()] = (movie_id, genre.lower())
+    except FileNotFoundError:
+        print(f"Error: The file '{filename}' was not found.")
+    except Exception as e:
+        print(f"An error occurred while reading {filename}: {e}")
+    return movie_data
 
+
+def load_ratings(filename: str) -> dict:
+    """
+    Loads movie ratings from a file, standardizing movie names to lowercase.
+
+    Args:
+        filename: The path to the ratings data file. The expected format per line is
+                  'movie_name|rating|user_id'.
+
+    Returns:
+        A dictionary mapping each movie_name (in lowercase) to a list of 
+        (user_id, rating) tuples.
+    """
+    ratings_data = defaultdict(list)
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                parts = line.split('|')
+                if len(parts) == 3:
+                    movie_name, rating_str, user_id = parts
+                    try:
+                        rating = float(rating_str)
+                        if 0 <= rating <= 5:
+                            # Use movie_name.lower() as the key.
+                            ratings_data[movie_name.lower()].append((user_id, rating))
+                        else:
+                            print(f"Warning: Rating '{rating}' for movie '{movie_name}' is outside the valid range (0-5). Skipping line.")
+                    except ValueError:
+                        print(f"Warning: Could not parse rating '{rating_str}' for movie '{movie_name}'. Skipping line.")
+    except FileNotFoundError:
+        print(f"Error: The file '{filename}' was not found.")
+    except Exception as e:
+        print(f"An error occurred while reading {filename}: {e}")
+    return dict(ratings_data)
+# Movie popularity
+# Return top n movies ranked by avg rating
+def top_movies(n: int, ratings: dict) -> list:
+    """
+    Finds the top n movies ranked by average rating.
+
+    Args:
+        n: The number of top movies to return.
+        ratings: A dictionary mapping movie names to a list of (user_id, rating) tuples.
+
+    Returns:
+        A list of tuples, where each tuple contains (movie_name, average_rating),
+        sorted in descending order of average rating. In case of a tie, movies
+        are sorted alphabetically by name.
+    """
+    if n <= 0:
+        return []
+    
+    avg_ratings = {}
+    for movie_name, user_ratings in ratings.items():
+        if not user_ratings:
+            print(f"Warning: Movie '{movie_name}' has no ratings. Skipping.")
+            continue
+        total_rating = sum(rating for user_id, rating in user_ratings)
+        avg_ratings[movie_name] = total_rating / len(user_ratings)
+
+    sorted_movies = sorted(avg_ratings.items(), key=lambda item: (-item[1], item[0]))
+    return sorted_movies[:n]
 
 def top_movies_in_genre(n: int, genre: str, movies: MoviesDict, ratings: RatingsDict) -> List[str]:
     """Return the top-n movies in a given genre ranked by average rating.
@@ -395,4 +347,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
